@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Animal Detector</title>
+<style>
+  :root {
+    --bg: #eef2ee;
+    --surface: #ffffff;
+    --ink: #15231c;
+    --muted: #55655c;
+    --line: #c9d4cc;
+    --accent: #0d6b57;
+    --accent-ink: #ffffff;
+    --danger: #a3262a;
+    --radius: 10px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101a15;
+      --surface: #17241d;
+      --ink: #e6efe9;
+      --muted: #9db1a5;
+      --line: #2f4237;
+      --accent: #3fc3a0;
+      --accent-ink: #08241b;
+      --danger: #ff8a8d;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    line-height: 1.5;
+    padding: max(24px, env(safe-area-inset-top)) 20px 48px;
+  }
+  main { max-width: 920px; margin: 0 auto; }
+  h1 {
+    font-size: clamp(1.9rem, 5vw, 2.8rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin: 28px 0 8px;
+  }
+  .lede { color: var(--muted); margin: 0 0 28px; max-width: 56ch; }
+
+  /* Drop zone: camera-viewfinder corners are the one memorable element */
+  .drop {
+    position: relative;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    min-height: 260px;
+    padding: 32px 24px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .drop::before, .drop::after,
+  .drop .c1, .drop .c2 {
+    content: ""; position: absolute; width: 34px; height: 34px;
+    border: 0 solid var(--accent); transition: all .18s;
+  }
+  .drop::before { top: 14px; left: 14px; border-width: 3px 0 0 3px; }
+  .drop::after  { top: 14px; right: 14px; border-width: 3px 3px 0 0; }
+  .drop .c1 { bottom: 14px; left: 14px; border-width: 0 0 3px 3px; }
+  .drop .c2 { bottom: 14px; right: 14px; border-width: 0 3px 3px 0; }
+  .drop.over { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+  .drop.over::before, .drop.over::after, .drop.over .c1, .drop.over .c2 {
+    width: 52px; height: 52px;
+  }
+  .drop:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+  .drop strong { display: block; font-size: 1.25rem; margin-bottom: 6px; }
+  .drop span { color: var(--muted); font-size: .95rem; }
+  .browse {
+    display: inline-block; margin-top: 16px; padding: 10px 20px;
+    background: var(--accent); color: var(--accent-ink);
+    border-radius: 8px; font-weight: 600; font-size: .95rem;
+  }
+  input[type=file] { display: none; }
+
+  .error {
+    margin-top: 16px; padding: 12px 16px; border-radius: 8px;
+    border: 1px solid var(--danger); color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  }
+  [hidden] { display: none !important; }
+
+  .stage { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 24px; margin-top: 8px; align-items: start; }
+  @media (max-width: 760px) { .stage { grid-template-columns: 1fr; } }
+
+  .photo { position: relative; background: var(--surface); border-radius: var(--radius); overflow: hidden; }
+  .photo img { display: block; width: 100%; height: auto; }
+  .photo canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .busy {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    font-weight: 600;
+  }
+  .spin {
+    width: 26px; height: 26px; border-radius: 50%; margin: 0 auto 8px;
+    border: 3px solid var(--line); border-top-color: var(--accent);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 3s; } .drop, .drop * { transition: none; } }
+
+  .panel h2 { font-size: 1.1rem; margin: 0 0 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; padding: 0; list-style: none; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 999px; font-weight: 600;
+    background: var(--surface); border: 2px solid var(--c);
+  }
+  .chip small { color: var(--muted); font-weight: 500; }
+  .note { color: var(--muted); font-size: .92rem; margin: 0 0 16px; }
+
+  .rows { list-style: none; margin: 0 0 20px; padding: 0; }
+  .rows li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: .95rem; }
+  .rows .bar { grid-column: 1 / -1; height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; }
+  .rows .bar i { display: block; height: 100%; background: var(--c); }
+
+  .control { margin: 18px 0; }
+  .control label { display: flex; justify-content: space-between; font-size: .92rem; margin-bottom: 6px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+
+  button.again {
+    font: inherit; font-weight: 600; cursor: pointer;
+    padding: 10px 18px; border-radius: 8px;
+    background: transparent; color: var(--ink); border: 2px solid var(--line);
+  }
+  button.again:hover { border-color: var(--accent); }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  footer { margin-top: 40px; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>What animals are in your photo?</h1>
+  <p class="lede">Add a picture and the detector will find each animal, outline it and tell you what it is.</p>
+
+  <section id="start">
+    <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose an image or drop it here">
+      <i class="c1"></i><i class="c2"></i>
+      <div>
+        <strong>Drop an image here</strong>
+        <span>JPG, PNG, WEBP, BMP, GIF or TIFF, up to 15 MB. You can also paste with Ctrl+V.</span><br>
+        <span class="browse">Browse files</span>
+      </div>
+    </div>
+    <input id="file" type="file" accept="image/*">
+  </section>
+
+  <div id="error" class="error" role="alert" hidden></div>
+
+  <section id="stage" class="stage" hidden>
+    <div class="photo">
+      <img id="img" alt="Your uploaded photo">
+      <canvas id="canvas"></canvas>
+      <div id="busy" class="busy" hidden><div><div class="spin"></div>Looking for animals...</div></div>
+    </div>
+
+    <div class="panel" aria-live="polite">
+      <h2 id="headline">Analyzing...</h2>
+      <ul id="chips" class="chips"></ul>
+      <p id="note" class="note" hidden></p>
+      <ul id="rows" class="rows"></ul>
+
+      <div class="control">
+        <label for="conf"><span>Minimum confidence</span><output id="confOut">35%</output></label>
+        <input id="conf" type="range" min="10" max="90" value="35">
+      </div>
+      <button id="again" class="again" type="button">Try another image</button>
+    </div>
+  </section>
+
+  <footer id="footer"></footer>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const drop = $('#drop'), input = $('#file'), errBox = $('#error');
+const stage = $('#stage'), start = $('#start'), img = $('#img'), canvas = $('#canvas');
+const slider = $('#conf'), confOut = $('#confOut');
+
+let currentFile = null, lastResult = null, reqId = 0, timer = null, objectUrl = null;
+
+const pretty = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
+const colorFor = (label) => {
+  let h = 0; for (const ch of label) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `hsl(${h} 68% 42%)`;
+};
+const pct = (x) => Math.round(x * 100) + '%';
+
+function showError(msg) { errBox.textContent = msg; errBox.hidden = false; }
+function hideError() { errBox.hidden = true; }
+
+/* ---------- choosing a file ---------- */
+drop.addEventListener('click', () => input.click());
+drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+input.addEventListener('change', () => { if (input.files[0]) handleFile(input.files[0]); input.value = ''; });
+
+['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+// stop the browser opening the image if it is dropped outside the box
+['dragover', 'drop'].forEach((t) => window.addEventListener(t, (e) => e.preventDefault()));
+window.addEventListener('drop', (e) => { if (!drop.contains(e.target) && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+window.addEventListener('paste', (e) => {
+  const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
+  if (item) handleFile(item.getAsFile());
+});
+
+function handleFile(file) {
+  hideError();
+  if (!file.type.startsWith('image/')) { showError('That file is not an image. Choose a JPG, PNG, WEBP, BMP, GIF or TIFF file.'); return; }
+  if (file.size > 15 * 1024 * 1024) { showError('That image is larger than 15 MB. Choose a smaller one.'); return; }
+  currentFile = file; lastResult = null;
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  objectUrl = URL.createObjectURL(file);
+  clearCanvas();
+  img.onload = () => analyze();
+  img.onerror = () => { showError('Your browser cannot display this image format. Convert it to JPG or PNG and try again.'); reset(); };
+  img.src = objectUrl;
+  start.hidden = true; stage.hidden = false;
+  $('#headline').textContent = 'Analyzing...';
+  $('#chips').innerHTML = ''; $('#rows').innerHTML = ''; $('#note').hidden = true;
+}
+
+function reset() {
+  stage.hidden = true; start.hidden = false; currentFile = null; reqId++;
+}
+$('#again').addEventListener('click', () => { hideError(); reset(); });
+
+/* ---------- talking to the server ---------- */
+slider.addEventListener('input', () => {
+  confOut.textContent = slider.value + '%';
+  clearTimeout(timer);
+  timer = setTimeout(() => { if (currentFile) analyze(); }, 350);
+});
+
+async function analyze() {
+  const id = ++reqId;
+  hideError(); $('#busy').hidden = false;
+  const fd = new FormData();
+  fd.append('file', currentFile);
+  fd.append('conf', slider.value / 100);
+  try {
+    const res = await fetch('/api/detect', { method: 'POST', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || `The server returned an error (${res.status}).`);
+    if (id !== reqId) return;
+    lastResult = data; render(data);
+  } catch (e) {
+    if (id !== reqId) return;
+    showError(e.message === 'Failed to fetch'
+      ? 'Could not reach the server. Check that python run.py is still running.'
+      : e.message);
+    $('#headline').textContent = 'Something went wrong';
+  } finally {
+    if (id === reqId) $('#busy').hidden = true;
+  }
+}
+
+/* ---------- showing results ---------- */
+function render(data) {
+  const chips = $('#chips'), rows = $('#rows'), note = $('#note');
+  chips.innerHTML = ''; rows.innerHTML = ''; note.hidden = true;
+
+  if (!data.animals.length) {
+    $('#headline').textContent = 'No animals found';
+    note.textContent = 'Try lowering the minimum confidence, or use a photo where the animal is larger and clearer.';
+    note.hidden = false;
+  } else {
+    const n = data.detections.length;
+    $('#headline').textContent = data.mode === 'classifier'
+      ? 'Best guess for this photo'
+      : `Found ${n} ${n === 1 ? 'animal' : 'animals'}`;
+    for (const a of data.animals) {
+      const li = document.createElement('li');
+      li.className = 'chip'; li.style.setProperty('--c', colorFor(a.label));
+      li.innerHTML = `${pretty(a.label)}${a.count > 1 ? ` <small>x${a.count}</small>` : ''}`;
+      chips.appendChild(li);
+    }
+    if (data.mode === 'classifier') {
+      note.textContent = 'No individual animals were outlined, so this is the classifier\'s guess for the whole image.';
+      note.hidden = false;
+    }
+    for (const d of data.detections) {
+      const li = document.createElement('li');
+      li.style.setProperty('--c', colorFor(d.label));
+      li.innerHTML = `<span>${pretty(d.label)}</span><span>${pct(d.confidence)}</span><div class="bar"><i style="width:${pct(d.confidence)}"></i></div>`;
+      rows.appendChild(li);
+    }
+  }
+  drawBoxes(data);
+  $('#footer').textContent = `Model: ${data.model}. Took ${data.ms} ms.`;
+}
+
+function clearCanvas() { const c = canvas.getContext('2d'); c.clearRect(0, 0, canvas.width, canvas.height); }
+
+function drawBoxes(data) {
+  const W = img.naturalWidth, H = img.naturalHeight;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  const line = Math.max(3, W / 250), fs = Math.max(14, W / 42);
+  ctx.font = `600 ${fs}px "Segoe UI", system-ui, sans-serif`;
+  ctx.textBaseline = 'top';
+  for (const d of data.detections) {
+    if (!d.box) continue;
+    const [x1, y1, x2, y2] = [d.box[0] * W, d.box[1] * H, d.box[2] * W, d.box[3] * H];
+    const color = colorFor(d.label);
+    ctx.lineWidth = line; ctx.strokeStyle = color;
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    const text = `${pretty(d.label)} ${pct(d.confidence)}`;
+    const tw = ctx.measureText(text).width + fs * 0.8, th = fs * 1.5;
+    const ty = y1 - th >= 0 ? y1 - th : y1;
+    ctx.fillStyle = color; ctx.fillRect(x1, ty, tw, th);
+    ctx.fillStyle = '#fff'; ctx.fillText(text, x1 + fs * 0.4, ty + fs * 0.25);
+  }
+}
+</script>
+</body>
+</html>
