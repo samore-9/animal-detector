@@ -1,0 +1,10 @@
+# Core (web server + model)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+ultralytics>=8.2.0      # YOLOv8; installs PyTorch automatically
+pillow>=10.0
+requests>=2.31
+
+# Optional: lets the server read iPhone .heic photos
+# pillow-heif>=0.16

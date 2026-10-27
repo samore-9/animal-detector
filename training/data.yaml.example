@@ -1,0 +1,12 @@
+# Copy to training/data.yaml and adjust the paths to where you unzipped the Kaggle dataset.
+# Expected layout:
+#   datasets/wildlife/images/train/*.jpg   datasets/wildlife/labels/train/*.txt
+#   datasets/wildlife/images/val/*.jpg     datasets/wildlife/labels/val/*.txt
+path: datasets/wildlife
+train: images/train
+val: images/val
+names:
+  0: buffalo
+  1: elephant
+  2: rhino
+  3: zebra
